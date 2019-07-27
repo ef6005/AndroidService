@@ -5,6 +5,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
+import android.os.AsyncTask;
 import android.os.Binder;
 import android.os.IBinder;
 import android.util.Log;
@@ -22,17 +23,66 @@ public class BoundForegroundService extends Service {
         this.mBoundServiceListener = boundServiceListener;
     }
 
-    public class MyBinder extends Binder{
-        public BoundForegroundService getService(){
-            return BoundForegroundService.this;
-        }
-    }
-
-    private MyBinder myBinder = new MyBinder();
+    private static final String TAG = "hamid";
+    private static final int NOTIFICATION_ID = 5001;
+    //for android Oreo and next
+    private static final String NOTIFICATION_CHANNEL_ID = "com.example.androidServiceTutorial.foregroundService";
     private static boolean isRunning = false;
+    //Notification
+    NotificationManager notificationManager;
+    private MyBinder myBinder = new MyBinder();
 
     public static boolean isRunning() {
         return isRunning;
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        Log.i(TAG, "onStartCommand: ");
+
+
+        Notification notification = new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+                .setContentTitle("Content Title")
+                .setContentText("Content Text for Notification")
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .build();
+        startForeground(NOTIFICATION_ID, notification);
+
+        new AsyncTask<Void, Integer, Void>() {
+            @Override
+            protected Void doInBackground(Void... voids) {
+                for (int i = 0; i < 100; i++) {
+                    Log.i(TAG, "run: " + i);
+                    updateNotification(i);
+
+                    publishProgress(i);
+
+                    try {
+                        Thread.sleep(200);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            protected void onProgressUpdate(Integer... values) {
+                super.onProgressUpdate(values);
+                //update ui on MainActivity:
+                if (mBoundServiceListener != null)
+                    mBoundServiceListener.onCounterChanged(values[0]);
+            }
+
+            @Override
+            protected void onPostExecute(Void v) {
+                super.onPostExecute(v);
+                stopForeground(true);
+                stopSelf();
+            }
+        }.execute();
+
+        return START_NOT_STICKY;
     }
 
     @Nullable
@@ -42,14 +92,6 @@ public class BoundForegroundService extends Service {
         //return value for boundService
         return myBinder;
     }
-
-    private static final String TAG = "hamid";
-
-    //Notification
-    NotificationManager notificationManager;
-    private static final int NOTIFICATION_ID = 5001;
-    //for android Oreo and next
-    private static final String NOTIFICATION_CHANNEL_ID = "com.example.androidServiceTutorial.foregroundService";
 
     @Override
     public void onCreate() {
@@ -72,42 +114,10 @@ public class BoundForegroundService extends Service {
         isRunning = false;
     }
 
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.i(TAG, "onStartCommand: ");
-
-
-        Notification notification = new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-                .setContentTitle("Content Title")
-                .setContentText("Content Text for Notification")
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .build();
-
-        Thread thread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                for (int i = 0; i < 100; i++) {
-                    Log.i(TAG, "run: " + i);
-                    updateNotification(i);
-
-                    //update ui on MainActivity:
-                    if( mBoundServiceListener != null )
-                        mBoundServiceListener.onCounterChanged(i);
-
-                    try {
-                        Thread.sleep(200);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                }
-                stopForeground(true);
-                stopSelf();
-            }
-        });
-
-        startForeground(NOTIFICATION_ID, notification);
-        thread.start();
-        return START_NOT_STICKY;
+    class MyBinder extends Binder {
+        BoundForegroundService getService() {
+            return BoundForegroundService.this;
+        }
     }
 
     private void updateNotification(int i) {
